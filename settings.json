@@ -1,0 +1,8 @@
+{
+  "srrDevice": {
+    "host": "10.0.0.200",
+    "httpPort": "80",
+    "udpPort": "1051",
+    "serial": "000466"
+  }
+}
