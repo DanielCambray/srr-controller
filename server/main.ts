@@ -21,5 +21,9 @@ Meteor.startup(() => {
     SyncedCron.start();
 });
 
+Meteor.publish('rigs', function(){
+    return Rigs.find();
+})
+
 
 

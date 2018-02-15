@@ -29,6 +29,11 @@ declare module "*.sass" {
   export default style;
 }
 
+declare module '*.vue' {
+    import Vue from 'vue'
+    export default Vue
+}
+
 declare module "meteor/hwillson:stub-collections" {
   import { Mongo } from "meteor/mongo";
 
