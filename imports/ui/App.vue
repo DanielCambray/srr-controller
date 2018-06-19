@@ -1,6 +1,7 @@
 <template>
     <div class="app container">
-        <rigs></rigs>
+        <srrs></srrs>
+        <slots></slots>
     </div>
 </template>
 
@@ -8,6 +9,8 @@
     import Vue from 'vue';
     import Component from 'vue-class-component';
     import Rigs from './Rigs.vue';
+    import Srrs from './Srrs.vue';
+    import Slots from './Slots.vue';
 
     export default {
         data() {
@@ -22,6 +25,8 @@
         },
         components: {
             Rigs,
+            Srrs,
+            Slots
         },
         metaInfo: {
             title: 'SRR Monitor',

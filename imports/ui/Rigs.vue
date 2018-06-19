@@ -30,6 +30,7 @@
                             <li><a href="#" @click="srr_command('long_reset', rig.slot, rig._id)">Long Reset</a></li>
                         </ul>
                     </div>
+
                 </div>
 
             </div>
@@ -37,7 +38,6 @@
         </div>
 
     </div>
-
 </template>
 
 <script lang="ts">
