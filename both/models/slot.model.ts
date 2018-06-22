@@ -8,5 +8,7 @@ export interface Slot extends CollectionObject{
     keep_alive: number;
     srr_id: number;
     eb_id: number;
+    srr_serial: number;
+    eb_serial: number;
 
 }

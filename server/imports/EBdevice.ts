@@ -5,34 +5,33 @@ var inherits = require('util').inherits;
 var dgram = require('dgram');
 var EventEmitter = require('events');
 
-export function SRRdevice(params)
+export function EBdevice(params)
 {
-    console.log("SRR constructor");
+    console.log("EB constructor");
     this.host = params.host;
     this.port = params.port;
-    this.serial = params.serial;
+    this.srr_serial = params.srr_serial;
+    this.eb_serial = params.eb_serial;
 
     EventEmitter.call(this);
 
     //this.emitter = new EventEmitter();
 
     this.actions = {
-        reboot_srr: "80",
-        get_version: "81",
-        turn_on: "51",
-        turn_off: "52",
-        reset_fast: "53",
-        reset_long: "58",
-        get_status: "54",
-        get_status_all: "5a",
-        get_status_short: "62",
-        set_watchdog: "5e",
-        set_always_on: "61",
-        get_reboot_counters: "5b",
-        reset_reboot_counter: "63",
-        get_config: "56",
-        set_config: "57",
-        get_eb_list: "5f"
+        reboot_eb: "52",
+        get_version: "56",
+        turn_on: "50",
+        turn_off: "46",
+        reset_fast: "45",
+        reset_long: "45",
+        get_status: "49",
+        get_status_all: "49",
+        get_status_short: "49",
+        get_status_short_2: "49",
+        set_watchdog: "57",
+        set_always_on: "59",
+        get_reboot_counters: "4e",
+        reset_reboot_counter: "73",
     };
 
     this.status_names = [
@@ -47,11 +46,9 @@ export function SRRdevice(params)
     ]
 }
 
-inherits(SRRdevice, EventEmitter);
+inherits(EBdevice, EventEmitter);
 
-//module.exports = SRRDevice;
-
-SRRdevice.prototype.hexToASCII = function(str1)
+EBdevice.prototype.hexToASCII = function(str1)
 {
     var hex  = str1.toString();
     var str = '';
@@ -61,7 +58,18 @@ SRRdevice.prototype.hexToASCII = function(str1)
     return str;
 }
 
-SRRdevice.prototype.pad = function pad(pad, str, padLeft) {
+EBdevice.prototype.hexToASCIIToInt = function(str1)
+{
+    var hex  = str1.toString();
+    var str = '';
+    for (var n = 0; n < hex.length; n += 2) {
+        str += String.fromCharCode("0x" + hex.substr(n, 2));
+    }
+    return parseInt("0x" + str);
+}
+
+
+EBdevice.prototype.pad = function pad(pad, str, padLeft) {
     if (typeof str === 'undefined')
         return pad;
     if (padLeft) {
@@ -71,15 +79,33 @@ SRRdevice.prototype.pad = function pad(pad, str, padLeft) {
     }
 }
 
-SRRdevice.prototype.parseSlotNumber = function (slot)
+/**
+ * Slot 29 => devient 29-1 = 28
+ * 28 en hex => 1C
+ * 1 en ascii hex => 31
+ * C en ascii hex => 43
+ * @param slot
+ * @returns {string}
+ */
+EBdevice.prototype.parseSlotNumber = function (slot)
 {
-    var slot = (parseInt(slot) - 1).toString();
+    var slot = (parseInt(slot-1)).toString(16).toUpperCase();
     slot = this.pad("00", slot, true);
+
+    var slot1 = slot.charCodeAt(0).toString(16);
+    slot1 = this.pad("00", slot1, true);
+
+    var slot2 = slot.charCodeAt(1).toString(16);
+    slot2 = this.pad("00", slot2, true);
+
+    slot = slot1 + slot2;
 
     return slot;
 }
 
-SRRdevice.prototype.parseStatus = function (status)
+
+
+EBdevice.prototype.parseStatus = function (status)
 {
     if (status) {
         status = "01";
@@ -90,7 +116,7 @@ SRRdevice.prototype.parseStatus = function (status)
     return status;
 }
 
-SRRdevice.prototype.send = function(action, data)
+EBdevice.prototype.send = function(action, data)
 {
     var self = this;
 
@@ -119,7 +145,7 @@ SRRdevice.prototype.send = function(action, data)
         //console.log(msg.toString('hex'));
         //console.log('Received %d bytes from %s:%d\n',msg.length, info.address, info.port);
         var output = self.decodePacket(action, msg);
-        self.emit('srr-message', self.serial, output);
+        self.emit('eb-message', {eb_serial: self.eb_serial, srr_serial: self.srr_serial}, output);
 
         // We close, since there will be no communication
         client.close();
@@ -136,7 +162,7 @@ SRRdevice.prototype.send = function(action, data)
     });
 }
 
-SRRdevice.prototype.generatePacket = function (action, data = null)
+EBdevice.prototype.generatePacket = function (action, data = null)
 {
     var packet;
     var action_id;
@@ -149,7 +175,7 @@ SRRdevice.prototype.generatePacket = function (action, data = null)
         action_id = this.actions[action];
     }
 
-    if (action == 'reboot_srr')
+    if (action == 'reboot_eb')
     {
         packet = this.generatePacketHex(action_id);
     } else if (action == 'get_version')
@@ -194,16 +220,28 @@ SRRdevice.prototype.generatePacket = function (action, data = null)
         }
     } else if (action == 'get_status')
     {
-        packet = this.generatePacketHex(action_id);
+        packet = this.generatePacketHex(action_id, "43");
     } else if (action == 'get_status_short')
     {
-        packet = this.generatePacketHex(action_id);
+        packet = this.generatePacketHex(action_id, "53");
+    } else if (action == 'get_status_short_2')
+    {
+        packet = this.generatePacketHex(action_id, "48");
     } else if (action == 'get_status_all')
     {
-        packet = this.generatePacketHex(action_id);
+        packet = this.generatePacketHex(action_id, "41");
     } else if (action == 'get_reboot_counters')
     {
         packet = this.generatePacketHex(action_id);
+    } else if (action == 'reset_reboot_counter')
+    {
+        if (!data.slot)
+        {
+            console.log("Error : Slot is missing ! ");
+        } else {
+            var slot = this.parseSlotNumber(data.slot);
+            packet = this.generatePacketHex(action_id, slot);
+        }
     } else if (action == 'set_watchdog')
     {
         if (!data.slot)
@@ -232,34 +270,28 @@ SRRdevice.prototype.generatePacket = function (action, data = null)
         var status = this.parseStatus(data.status);
 
         packet = this.generatePacketHex(action_id, slot + status);
-    } else if (action == 'get_config')
-    {
-        packet = this.generatePacketHex(action_id);
-    } else if (action == 'set_config')
-    {
-        packet = this.generatePacketHex(action_id);
-    } else if (action == 'get_eb_list')
-    {
-        packet = this.generatePacketHex(action_id);
     }
 
     return packet;
 }
 
-SRRdevice.prototype.generatePacketHex = function(action, data = "")
+EBdevice.prototype.generatePacketHex = function(action, data = "")
 {
     var firstByte = "ff";
-    var device = "00";
-    var mac = "485053" + this.serial;
 
-    // The byteCount = 7 + data.length/2
+    // 01 for EB device
+    var device = "01";
+    var mac = "485053" + this.srr_serial;
+    var eb_serial = this.eb_serial;
+
+    // The byteCount = 10 + data.length/2
     var byteCount;
     if (data == "") {
-        byteCount = "07";
+        byteCount = "0a";
     } else
     {
-        byteCount = 7 + (data.length/2);
-        byteCount = byteCount.toString();
+        byteCount = 10 + (data.length/2);
+        byteCount = byteCount.toString(16);
         byteCount = this.pad("00", byteCount, true);
     }
 
@@ -272,7 +304,10 @@ SRRdevice.prototype.generatePacketHex = function(action, data = "")
         mac.substring(4,6),
         mac.substring(6,8),
         mac.substring(8,10),
-        mac.substring(10,12)
+        mac.substring(10,12),
+        eb_serial.substring(0,2),
+        eb_serial.substring(2,4),
+        eb_serial.substring(4,6)
     ];
 
     if (data != "")
@@ -294,7 +329,7 @@ SRRdevice.prototype.generatePacketHex = function(action, data = "")
     checksum = (checksum % 256).toString(16);
     checksum = this.pad('00', checksum, true);
 
-    var packet = firstByte + device + byteCount + action + mac + data + checksum;
+    var packet = firstByte + device + byteCount + action + mac + eb_serial + data + checksum;
 
     return packet;
 }
@@ -310,7 +345,7 @@ SRRdevice.prototype.generatePacketHex = function(action, data = "")
  * @param action
  * @returns {{}}
  */
-SRRdevice.prototype.checkResponse = function(packet, action)
+EBdevice.prototype.checkResponse = function(packet, action)
 {
     var data = {};
 
@@ -325,30 +360,41 @@ SRRdevice.prototype.checkResponse = function(packet, action)
         data.mac += this.pad("00", packet[i].toString(16), true);
     }
 
-    data.serial = "";
+    data.srr_serial = "";
     for (var i = 7 ; i<= 9 ; i++)
     {
-        data.serial += this.pad("00", packet[i].toString(16), true);
+        data.srr_serial += this.pad("00", packet[i].toString(16), true);
+    }
+
+    data.eb_serial = "";
+    for (var i = 10 ; i<= 12 ; i++)
+    {
+        data.eb_serial += this.pad("00", packet[i].toString(16), true);
     }
 
     data.data = "";
-    for (var i = 10; i < data.packet_length + 2; i++) {
+    for (var i = 13; i < data.packet_length + 2; i++) {
         data.data += this.pad("00", packet[i].toString(16), true);
     }
-
+    
     if (data.first_byte != "ff")
     {
         console.log("Error : Wrong first byte => should be ff");
     }
 
-    if (data.device_type != 0)
+    if (data.device_type != 1)
     {
-        console.log("Error : Wrong device type : should be 0 and not " + data.device_type);
+        console.log("Error : Wrong device type : should be 1 and not " + data.device_type);
     }
 
-    if (data.serial != this.serial)
+    if (data.srr_serial != this.srr_serial)
     {
-        console.log("Error : Wrong serial => should be " + this.serial + " and not " + data.serial);
+        console.log("Error : Wrong srr_serial => should be " + this.srr_serial + " and not " + data.srr_serial);
+    }
+
+    if (data.eb_serial != this.eb_serial)
+    {
+        console.log("Error : Wrong eb_serial => should be " + this.eb_serial + " and not " + data.eb_serial);
     }
 
     if (data.action != this.actions[action]) {
@@ -358,7 +404,7 @@ SRRdevice.prototype.checkResponse = function(packet, action)
     return data;
 }
 
-SRRdevice.prototype.decodePacket = function(action, packet)
+EBdevice.prototype.decodePacket = function(action, packet)
 {
     console.log("=== Decode Packet ===");
     //console.log(packet);
@@ -397,52 +443,19 @@ SRRdevice.prototype.decodePacket = function(action, packet)
         output.action = action;
 
         var reboot_counters = {};
-        for (var i = 0 ; i<8 ; i++)
+        for (var i = 0 ; i<32 ; i++)
         {
-            reboot_counters[i+1] = parseInt(data.data[4*i+2] + data.data[4*i+3] + data.data[4*i] + data.data[4*i+1],16);
+            //var counter = String.fromCharCode("0x" + data.data[8*i] + data.data[8*i+1])  + String.fromCharCode("0x" + data.data[8*i+2] + data.data[8*i+3]);
+            counter = parseInt("0x" + counter);
+
+            var counter = this.hexToASCIIToInt(data.data[8*i]+data.data[8*i+1]+data.data[8*i+2]+data.data[8*i+3]);
+
+            console.log(counter);
+
+            reboot_counters[i+1] = counter;
         }
 
         output.data = reboot_counters;
-
-        return output;
-    } else if (action == "get_eb_list")
-    {
-        console.log("=== " + action + " ===");
-        output.action = action;
-
-        output.data = {};
-
-        output.data.nb_eb = parseInt(data.data[2] + data.data[3] + data.data[0] + data.data[1],16);
-        for (var i = 0 ; i < output.data.nb_eb ; i++)
-        {
-            output.data.eb_list = [data.data[4+6*i+0] + data.data[4+6*i+1] + data.data[4+6*i+2] + data.data[4+6*i+3] + data.data[4+6*i+4] + data.data[4+6*i+5]];
-        }
-
-        return output;
-    } else if (action == "get_config")
-    {
-        console.log("=== " + action + " ===");
-        output.action = action;
-
-        output.data = {};
-
-        output.data.host = parseInt(data.data[0] + data.data[1],16) + "." +
-        parseInt(data.data[2] + data.data[3],16) +  "." +
-        parseInt(data.data[4] + data.data[5],16) +  "." +
-        parseInt(data.data[6] + data.data[7],16);
-
-        output.data.udp_port = parseInt(data.data[10] + data.data[11] + data.data[8] + data.data[9],16);
-        output.data.http_port = parseInt(data.data[14] + data.data[15] + data.data[12] + data.data[13],16);
-
-        output.data.keep_alive = parseInt(data.data[16] + data.data[17],16) * 10;
-        output.data.long_reset = parseInt(data.data[18] + data.data[19],16);
-
-        var hostname = '';
-        for (var i = 20 ; i < data.data.length - 2 ; i++)
-        {
-            hostname += data.data[i];
-        }
-        output.data.hostname = this.hexToASCII(hostname);
 
         return output;
     } else if (action == "get_status_short")
@@ -451,17 +464,53 @@ SRRdevice.prototype.decodePacket = function(action, packet)
 
         output.action = action;
         output.data = {};
-        output.data.slots = {};
+        output.data.slots = [];
 
-        for (var i = 0 ; i < 8; i++)
+        for (var i = 0 ; i < 32; i++)
         {
             var slot = {};
             slot.id = i+1;
-            slot.status = parseInt(data.data[2*i] + data.data[2*i+1], 16);
+            //slot.status = parseInt(data.data[2*i] + data.data[2*i+1], 16);
+            slot.status1 = this.hexToASCIIToInt(data.data[4*i] + data.data[4*i+1]);
+            slot.status2 = this.hexToASCIIToInt(data.data[4*i+2] + data.data[4*i+3]);
 
-            output.data.slots[i+1] = slot;
+            var bin1 = this.pad("0000",slot.status1.toString(2), true);
+
+            if (bin1[0] == 1) {
+                slot.state = true;
+            } else {
+                slot.state = false;
+            }
+
+            if (bin1[1] == 1) {
+                slot.watchdog_on = true;
+            } else {
+                slot.watchdog_on = false;
+            }
+
+            if (bin1[2] == 1) {
+                slot.always_on = true;
+            } else {
+                slot.always_on = false;
+            }
+
+            // Not sure...
+            if (bin1[3] == 1) {
+                slot.error = true;
+            } else {
+                slot.error = false;
+            }
+
+            slot.status_name = this.status_names[slot.status2];
+
+            if ((i == 6)||(i ==7)||(i == 8)||(i == 9)||(i == 30)||(i == 31)) {
+                //console.log(slot);
+            }
+
+            output.data.slots.push(slot);
         }
 
+        //console.log(output);
         return output;
     } else if (action == "get_status_all")
     {
@@ -471,7 +520,7 @@ SRRdevice.prototype.decodePacket = function(action, packet)
         output.data = {};
         output.data.slots = [];
 
-        for (var i = 0 ; i < 8; i++)
+        for (var i = 0 ; i < 32; i++)
         {
             var slot = {};
             slot.id = i+1;
@@ -522,6 +571,8 @@ SRRdevice.prototype.decodePacket = function(action, packet)
 
             output.data.slots.push(slot);
         }
+
+        //console.log(output);
         return output;
     } else if ((action == "turn_on")||(action == "turn_off")||(action == "reset_fast")||(action == "reset_long"))
     {
@@ -530,7 +581,6 @@ SRRdevice.prototype.decodePacket = function(action, packet)
         output.action = action;
         output.data = {status: "ok"};
 
-        //console.log(output);
         return output;
     }
 }

@@ -2,17 +2,18 @@ import {Rigs} from '../collections/rigs.collection';
 
 import {Meteor} from 'meteor/meteor';
 
+
+import {SRRs} from '../collections/srrs.collection';
+import { SRRdevice } from '../../server/imports/SRRdevice';
+
 Meteor.methods({
-    srr_command: function(command:string, rig_slot:string, rig_id:string) {
+    srr_command_legacy: function(command:string, srr_id:string, slot_number:string) {
 
         if (Meteor.isClient) {
             return;
         }
 
         var srrDevice = Meteor.settings.srrDevice;
-
-        //console.log(Meteor.settings);
-        //console.log(srrDevice);
 
         var srrDeviceHost = srrDevice.host;
         var srrDevicePort = srrDevice.udpPort;

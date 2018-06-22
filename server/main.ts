@@ -5,62 +5,29 @@ import { Rigs } from '../both/collections/rigs.collection';
 import { SRR } from '../both/models/srr.model';
 import { SRRs } from '../both/collections/srrs.collection';
 
+
+import { EB } from '../both/models/eb.model';
+import { EBs } from '../both/collections/ebs.collection';
+
 import { Slot } from '../both/models/slot.model';
 import { Slots } from '../both/collections/slots.collection';
 
 import { checkSRR } from './imports/checkSRR';
 import { SRRdevice } from './imports/SRRdevice';
+import { EBdevice } from './imports/EBdevice';
 
-import '../both/methods/rigs.methods';
+import {DeviceWatcher} from "./imports/DeviceWatcher";
+
+import '../both/methods/slots.methods';
 
 //import {SyncedCron} from 'meteor/meteor';
 
 Meteor.startup(() => {
 
-    //const SRRDevice = require('./imports/SRRdevice');
-
-
-    var updateSRRinfo = function updateSRRinfo (serial, output){
-        console.log("=== UPDATE SRR INFO ===");
-        console.log(serial);
-        console.log(output);
-
-        // We look for the SRR device
-        var srr = SRRs.findOne({serial: serial});
-
-        console.log(srr);
-
-
-        if (output.action == "get_version") {
-            SRRs.update({serial: serial}, {$set:{version: output.data.version}} );
-        } else if (output.action == "get_config") {
-            SRRs.update({serial: serial}, {$set:{
-                host: output.data.host,
-                udp_port: output.data.udp_port,
-                http_port: output.data.http_port,
-                keep_alive: output.data.keep_alive,
-                long_reset: output.data.long_reset,
-                hostname: output.data.hostname
-            }});
-        } else if (output.action == "get_status_all") {
-            for (var i = 0 ; i < output.data.slots.length; i++) {
-                Slots.upsert({srr_id: srr._id, number: output.data.slots[i].id}, {$set:{
-                        state: output.data.slots[i].state,
-                        keep_alive: output.data.slots[i].keep_alive,
-                        always_on: output.data.slots[i].always_on,
-                        watchdog_on: output.data.slots[i].watchdog_on,
-                        status_name: output.data.slots[i].status_name,
-                        next_action: output.data.slots[i].next_action
-                    }});
-            }
-
-        }
-
-        console.log(srr);
-
-    }
-
-    var srrDevices = [];
+    var deviceWatcher = new DeviceWatcher();
+    
+    // Global variable that holds the srrDevices
+    srrDevices = [];
     var srrs = SRRs.find({});
 
     srrs.forEach((srr) => {
@@ -70,21 +37,42 @@ Meteor.startup(() => {
             serial: srr.serial
         });
 
-
-        srrDevice.addListener('srr-message', Meteor.bindEnvironment(updateSRRinfo));
-
-        // We try to connect
-        //srrDevice.send('get_version');
-        //srrDevice.send('get_config');
-        srrDevice.send('get_status_all');
+        srrDevice.addListener('srr-message', Meteor.bindEnvironment(deviceWatcher.updateSRR));
 
         srrDevices.push(srrDevice);
-
     })
 
-    //
+    // Global variable that holds the ebDevices
+    ebDevices = [];
+    var ebs = EBs.find({});
+
+    ebs.forEach((eb) => {
+
+        var srr = SRRs.findOne({serial: eb.srr_serial});
+
+        ebDevice = new EBdevice({
+            host: srr.host,
+            port: srr.udp_port,
+            srr_serial: srr.serial,
+            eb_serial: eb.serial
+        });
+
+        ebDevice.addListener('eb-message', Meteor.bindEnvironment(deviceWatcher.updateEB));
+
+        ebDevices.push(ebDevice);
+    })
+
 
     /*
+    ebDevice = new EBdevice({
+        host: "10.0.0.200",
+        port: "1051",
+        srr_serial:"000466",
+        eb_serial: "100160"
+    });*/
+
+    //
+/*
     srrDevice = new SRRdevice({
         host: "10.0.0.200",
         port: "1051",
@@ -100,6 +88,10 @@ Meteor.startup(() => {
             for (var i in srrDevices) {
                 srrDevices[i].send('get_status_all');
             }
+
+            for (var i in ebDevices) {
+                ebDevices[i].send('get_status_short');
+            }
         }
     });
 
@@ -113,10 +105,37 @@ Meteor.startup(() => {
                 srrDevices[i].send('get_eb_list');
                 srrDevices[i].send('get_config');
             }
+
+            for (var i in ebDevices) {
+                ebDevices[i].send('get_version');
+            }
         }
     });
 
     SyncedCron.start();
+
+
+
+    //ebDevice.send('get_version');
+
+
+    // 303030303343
+    //ebDevice.send('get_status_all');
+
+    //303030303030303030303030
+    //ebDevice.send('get_status');
+
+    //4530453045304530453043304330303030303030453045304530453030303030303130313030303030303030303030303030303030303030303130303030
+    //ebDevice.send('get_status_short');
+
+    //32433031303030303030303030303243303130303030303030303030324330313030303030303030303032303033303030303036303033313330333033313336333034303030303030303030303030303030303730303030303030303030303030303037303030463030303030303031
+    //32433031303030303030303030303243303130303030303030303030324330313030303030303030303032303033303030303036303033313330333033313336333034303030303030303030303030303030303730303030303030303030303030303037303030463030303030303031001b
+    //ebDevice.send('get_status_short_2');
+
+    //ebDevice.send('reset_reboot_counter',{slot:2});
+
+    //ebDevice.send('get_reboot_counters');
+
 
     //srr.generatePacket('reboot_srr');
     //srr.generatePacket('get_status_all');
@@ -192,9 +211,15 @@ Meteor.publish('srrs', function(){
     return SRRs.find();
 })
 
+Meteor.publish('ebs', function(){
+    return EBs.find();
+})
+
 Meteor.publish('slots', function(){
     return Slots.find();
 })
+
+
 
 
 

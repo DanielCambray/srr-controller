@@ -1,6 +1,7 @@
 <template>
     <div class="app container">
         <srrs></srrs>
+        <ebs></ebs>
         <slots></slots>
     </div>
 </template>
@@ -10,6 +11,7 @@
     import Component from 'vue-class-component';
     import Rigs from './Rigs.vue';
     import Srrs from './Srrs.vue';
+    import Ebs from './Ebs.vue';
     import Slots from './Slots.vue';
 
     export default {
@@ -26,6 +28,7 @@
         components: {
             Rigs,
             Srrs,
+            Ebs,
             Slots
         },
         metaInfo: {
